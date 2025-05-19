@@ -1,0 +1,62 @@
+name: Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to trigger the workflow on'
+        required: true
+        default: 'main'
+      aws_region:
+        description: 'AWS Region'
+        required: true
+        default: 'us-east-1'
+      environment:
+        description: 'Environment name (e.g., develop, staging, prod)'
+        required: true
+        default: 'develop'
+
+jobs:
+  ecr:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ github.event.inputs.aws_region }}
+      ENVIRONMENT: ${{ github.event.inputs.environment }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch }}
+
+    - name: Set up Podman
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y podman
+
+    - name: Build Podman image
+      run: |
+        IMAGE_NAME=${AWS_REGION}-${ENVIRONMENT}-ecr
+        podman build -t $IMAGE_NAME --platform linux/amd64 .github/src
+
+    - name: Tag Podman image
+      run: |
+        IMAGE_NAME=${AWS_REGION}-${ENVIRONMENT}-ecr
+        REPO_URL=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_NAME}
+        podman tag $IMAGE_NAME:latest $REPO_URL:latest
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Log in to Amazon ECR
+      run: |
+        aws ecr get-login-password --region ${AWS_REGION} | podman login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+    - name: Push Podman image to Amazon ECR
+      run: |
+        IMAGE_NAME=${AWS_REGION}-${ENVIRONMENT}-ecr
+        REPO_URL=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_NAME}
+        podman push $REPO_URL:latest

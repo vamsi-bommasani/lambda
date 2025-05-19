@@ -1,0 +1,37 @@
+name: CI
+on:
+    [push]
+
+jobs:
+  terraform-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Run TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.50.3
+      - run: tflint --init && tflint
+
+    #   - name: Run tfsec (Security Scanner)
+    #     uses: aquasecurity/tfsec-action@v1.0.0
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      - name: Terraform Providers
+        run: terraform providers
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
